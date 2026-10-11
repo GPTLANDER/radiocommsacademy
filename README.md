@@ -151,17 +151,16 @@ git commit -m "feat: complete production release of Radio Comms Academy"
 ```
 
 ### Step 2: Push to GitHub
-Create a new GitHub repository named `radio-comms-academy` on your GitHub account, then run:
 ```bash
 git branch -M main
-git remote add origin https://github.com/<YOUR_GITHUB_USERNAME>/radio-comms-academy.git
+git remote add origin https://github.com/GPTLANDER/radiocommsacademy.git
 git push -u origin main
 ```
 
 ### Step 3: Connect to Cloudflare Pages
 1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
 2. Navigate to **Workers & Pages** > **Create application** > **Pages** > **Connect to Git**.
-3. Select your GitHub repository `radio-comms-academy`.
+3. Select your GitHub repository **`radiocommsacademy`**.
 4. In the **Build configuration** screen, set:
    - **Framework preset**: `Vite`
    - **Build command**: `npm run build`
