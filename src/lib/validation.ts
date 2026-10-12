@@ -126,3 +126,36 @@ export function generateRandomSequence(length: number): {
     decodedTokens: chosen.map((c) => c.codeWord),
   };
 }
+
+/**
+ * Checks a learner's typed flashcard answer against the canonical entry.
+ * Case-insensitive, trims whitespace and punctuation.
+ */
+export function isFlashcardAnswerCorrect(
+  userInput: string,
+  entry: LearningEntry
+): boolean {
+  const clean = userInput.trim().toLowerCase().replace(/[\s\-_]+/g, '');
+  if (!clean) return false;
+
+  const targetCode = entry.codeWord.toLowerCase().replace(/[\s\-_]+/g, '');
+  if (clean === targetCode) return true;
+
+  // Support common phonetic variations
+  if (targetCode === 'alfa' && clean === 'alpha') return true;
+  if (targetCode === 'juliett' && clean === 'juliet') return true;
+
+  // For digits: support written word, phonetic guide, or digit numeral
+  if (entry.category === 'digit') {
+    if (clean === entry.symbol.toLowerCase()) return true;
+    const pron = entry.pronunciationGuide.toLowerCase().replace(/[\s\-_]+/g, '');
+    if (clean === pron) return true;
+    if (entry.symbol === '9' && (clean === 'nine' || clean === 'niner')) return true;
+    if (entry.symbol === '5' && (clean === 'five' || clean === 'fife')) return true;
+    if (entry.symbol === '4' && (clean === 'four' || clean === 'fower')) return true;
+    if (entry.symbol === '3' && (clean === 'three' || clean === 'tree')) return true;
+    if (entry.symbol === '0' && (clean === 'zero' || clean === 'zeeroh')) return true;
+  }
+
+  return false;
+}

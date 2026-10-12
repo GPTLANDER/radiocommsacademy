@@ -91,6 +91,33 @@ describe('App Integration & End-to-End Scenarios', () => {
     expect(screen.getByText(/TRANSMISSION PROMPT/i)).toBeInTheDocument();
   });
 
+  it('allows typing flashcard answers, cross-checks case-insensitively, and awards points', async () => {
+    render(<App />);
+
+    const nav = getNav();
+    const cardsTab = within(nav).getByRole('button', { name: /Flashcards/i });
+    fireEvent.click(cardsTab);
+
+    await waitFor(() => {
+      expect(screen.getByText(/TRANSMISSION PROMPT/i)).toBeInTheDocument();
+    });
+
+    // Find input and type answer in lowercase ('alfa')
+    const input = screen.getByPlaceholderText(/e\.g\. alfa/i);
+    fireEvent.change(input, { target: { value: 'alfa' } });
+
+    // Submit via CHECK button
+    const checkBtn = screen.getByRole('button', { name: /^CHECK$/i });
+    fireEvent.click(checkBtn);
+
+    // Verify cross-check was successful and XP awarded
+    await waitFor(() => {
+      expect(screen.getByText(/VERIFIED MATCH — CORRECT!/i)).toBeInTheDocument();
+      expect(screen.getByText(/\+10 XP/i)).toBeInTheDocument();
+      expect(screen.getByText(/CANONICAL RESPONSE/i)).toBeInTheDocument();
+    });
+  });
+
   it('takes a knowledge check quiz and receives feedback', async () => {
     render(<App />);
 

@@ -30,6 +30,7 @@ export const App: React.FC = () => {
     updateSettings,
     resetAllProgress,
     dismissAchievementAlert,
+    addXP,
   } = useProgress();
 
   const [currentMode, setCurrentMode] = useState<LearningMode>('dashboard');
@@ -120,6 +121,7 @@ export const App: React.FC = () => {
                 onMarkLearned={markEntryLearned}
                 onMarkNeedsPractice={markEntryNeedsPractice}
                 onSessionComplete={recordSessionCompletion}
+                onAddXP={addXP}
               />
             )}
 

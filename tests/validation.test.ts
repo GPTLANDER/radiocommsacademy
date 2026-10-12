@@ -3,6 +3,7 @@ import {
   tokenizeInput,
   verifyDecoderAnswer,
   generateRandomSequence,
+  isFlashcardAnswerCorrect,
 } from '../src/lib/validation';
 
 describe('Decoder Input Validation & Verification', () => {
@@ -62,4 +63,45 @@ describe('Decoder Input Validation & Verification', () => {
     expect(seq5.sequence).toHaveLength(5);
     expect(seq5.decodedTokens).toHaveLength(5);
   });
+
+  describe('isFlashcardAnswerCorrect', () => {
+    const entryA = {
+      id: 'alpha-a',
+      category: 'alphabet' as const,
+      symbol: 'A',
+      displayName: 'A',
+      codeWord: 'Alfa',
+      pronunciationGuide: 'AL-fah',
+      sortOrder: 1,
+    };
+
+    const entry3 = {
+      id: 'digit-3',
+      category: 'digit' as const,
+      symbol: '3',
+      displayName: '3',
+      codeWord: 'Three',
+      pronunciationGuide: 'TREE',
+      sortOrder: 4,
+    };
+
+    it('matches alphabet code words case-insensitively with whitespace handling', () => {
+      expect(isFlashcardAnswerCorrect('alfa', entryA)).toBe(true);
+      expect(isFlashcardAnswerCorrect('ALFA', entryA)).toBe(true);
+      expect(isFlashcardAnswerCorrect('  Alfa  ', entryA)).toBe(true);
+      expect(isFlashcardAnswerCorrect('alpha', entryA)).toBe(true); // phonetic variant
+      expect(isFlashcardAnswerCorrect('bravo', entryA)).toBe(false);
+      expect(isFlashcardAnswerCorrect('', entryA)).toBe(false);
+    });
+
+    it('matches digit answers across written forms, pronunciation guides, and numerals', () => {
+      expect(isFlashcardAnswerCorrect('three', entry3)).toBe(true);
+      expect(isFlashcardAnswerCorrect('THREE', entry3)).toBe(true);
+      expect(isFlashcardAnswerCorrect('tree', entry3)).toBe(true); // radio pronunciation
+      expect(isFlashcardAnswerCorrect('TREE', entry3)).toBe(true);
+      expect(isFlashcardAnswerCorrect('3', entry3)).toBe(true);
+      expect(isFlashcardAnswerCorrect('four', entry3)).toBe(false);
+    });
+  });
 });
+
