@@ -116,6 +116,14 @@ describe('App Integration & End-to-End Scenarios', () => {
       expect(screen.getByText(/\+10 XP/i)).toBeInTheDocument();
       expect(screen.getByText(/CANONICAL RESPONSE/i)).toBeInTheDocument();
     });
+
+    // Verify it automatically advances to the next flashcard
+    await waitFor(
+      () => {
+        expect(screen.getByText(/Card 2 of 36/i)).toBeInTheDocument();
+      },
+      { timeout: 2500 }
+    );
   });
 
   it('takes a knowledge check quiz and receives feedback', async () => {

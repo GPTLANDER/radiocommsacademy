@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   RotateCcw,
   Shuffle,
@@ -56,6 +56,10 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
   const [feedback, setFeedback] = useState<AnswerFeedbackState | null>(null);
   const [hasAwardedCardXP, setHasAwardedCardXP] = useState<boolean>(false);
 
+  // Auto-advance timer and input ref
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   // Build card deck based on selected filter
   const deck = useMemo<LearningEntry[]>(() => {
     let pool: LearningEntry[] = [];
@@ -78,8 +82,29 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
 
   const [cards, setCards] = useState<LearningEntry[]>(() => deck);
 
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Auto-focus input when a fresh card appears
+  useEffect(() => {
+    if (!isFlipped && !isCompleted) {
+      inputRef.current?.focus();
+    }
+  }, [currentIndex, isFlipped, isCompleted]);
+
   // Reset when filter mode changes
   const handleFilterChange = (mode: 'all' | 'alphabet' | 'digits' | 'needs_practice') => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+
     setFilterMode(mode);
     let newDeck: LearningEntry[] = [];
     if (mode === 'alphabet') newDeck = [...ALPHABET_DATA];
@@ -102,6 +127,11 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
   };
 
   const handleShuffle = () => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+
     setCards(shuffleArray(cards));
     setCurrentIndex(0);
     setIsFlipped(false);
@@ -111,10 +141,86 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
   };
 
   const handleFlip = () => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     setIsFlipped((prev) => !prev);
   };
 
   const currentCard = cards[currentIndex];
+
+  const handleNextCard = useCallback(
+    (gotIt: boolean) => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      if (!currentCard) return;
+
+      // If not already verified via typing, record gotIt / practice
+      if (!feedback) {
+        if (gotIt) {
+          setGotItCount((c) => c + 1);
+          onMarkLearned(currentCard.id);
+          if (!hasAwardedCardXP) {
+            onAddXP?.(5);
+          }
+        } else {
+          setPracticeAgainCount((c) => c + 1);
+          onMarkNeedsPractice(currentCard.id);
+        }
+      }
+
+      if (currentIndex < cards.length - 1) {
+        setCurrentIndex((idx) => idx + 1);
+        setIsFlipped(false);
+        setTypedAnswer('');
+        setFeedback(null);
+        setHasAwardedCardXP(false);
+      } else {
+        // Completed session
+        const finalGotIt = feedback
+          ? feedback.isCorrect
+            ? gotItCount
+            : gotItCount
+          : gotIt
+          ? gotItCount + 1
+          : gotItCount;
+        const total = cards.length;
+        const accuracy = calculateAccuracy(finalGotIt, total);
+
+        const result: SessionResult = {
+          sessionId: `flashcard-${Date.now()}`,
+          mode: 'flashcards',
+          startedAt: sessionStartTime,
+          completedAt: Date.now(),
+          totalQuestions: total,
+          correctCount: finalGotIt,
+          accuracy,
+          xpEarned: BONUS_XP_FLASHCARD_SESSION + finalGotIt * 5,
+          missedEntryIds: Array.from(needsPracticeIds),
+        };
+
+        setIsCompleted(true);
+        onSessionComplete(result);
+      }
+    },
+    [
+      currentCard,
+      feedback,
+      hasAwardedCardXP,
+      currentIndex,
+      cards.length,
+      gotItCount,
+      onMarkLearned,
+      onAddXP,
+      onMarkNeedsPractice,
+      sessionStartTime,
+      needsPracticeIds,
+      onSessionComplete,
+    ]
+  );
 
   const handleVerifyTypedAnswer = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -135,65 +241,37 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
       }
       setGotItCount((c) => c + 1);
       onMarkLearned(currentCard.id);
+
+      // Automatically advance to the next card once verified right
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        handleNextCard(true);
+      }, 750);
     } else {
       setPracticeAgainCount((c) => c + 1);
       onMarkNeedsPractice(currentCard.id);
     }
   };
 
-  const handleNextCard = (gotIt: boolean) => {
-    if (!currentCard) return;
-
-    // If not already verified via typing, record gotIt / practice
-    if (!feedback) {
-      if (gotIt) {
-        setGotItCount((c) => c + 1);
-        onMarkLearned(currentCard.id);
-        if (!hasAwardedCardXP) {
-          onAddXP?.(5);
-        }
-      } else {
-        setPracticeAgainCount((c) => c + 1);
-        onMarkNeedsPractice(currentCard.id);
+  // Keyboard shortcut to immediately advance if learner presses Enter on flipped card
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (isFlipped && !isCompleted && e.key === 'Enter') {
+        e.preventDefault();
+        handleNextCard(feedback ? feedback.isCorrect : true);
       }
-    }
-
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex((idx) => idx + 1);
-      setIsFlipped(false);
-      setTypedAnswer('');
-      setFeedback(null);
-      setHasAwardedCardXP(false);
-    } else {
-      // Completed session
-      const finalGotIt = feedback
-        ? feedback.isCorrect
-          ? gotItCount
-          : gotItCount
-        : gotIt
-        ? gotItCount + 1
-        : gotItCount;
-      const total = cards.length;
-      const accuracy = calculateAccuracy(finalGotIt, total);
-
-      const result: SessionResult = {
-        sessionId: `flashcard-${Date.now()}`,
-        mode: 'flashcards',
-        startedAt: sessionStartTime,
-        completedAt: Date.now(),
-        totalQuestions: total,
-        correctCount: finalGotIt,
-        accuracy,
-        xpEarned: BONUS_XP_FLASHCARD_SESSION + finalGotIt * 5,
-        missedEntryIds: Array.from(needsPracticeIds),
-      };
-
-      setIsCompleted(true);
-      onSessionComplete(result);
-    }
-  };
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isFlipped, isCompleted, feedback, handleNextCard]);
 
   const handleRestart = () => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     setCards(shuffleArray(deck));
     setCurrentIndex(0);
     setIsFlipped(false);
@@ -206,6 +284,10 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
   };
 
   const handleTryAgain = () => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     setIsFlipped(false);
     setFeedback(null);
     setTypedAnswer('');
@@ -441,6 +523,7 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
 
           <div className="flex gap-2">
             <input
+              ref={inputRef}
               id="flashcard-answer-input"
               type="text"
               value={typedAnswer}
@@ -496,7 +579,9 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
                 )}
                 <div>
                   <span className="font-tactical text-xs font-bold uppercase tracking-wider block">
-                    {feedback.isCorrect ? 'VERIFIED MATCH — CORRECT!' : 'SIGNAL MISMATCH — INCORRECT'}
+                    {feedback.isCorrect
+                      ? 'VERIFIED MATCH — CORRECT! • ADVANCING...'
+                      : 'SIGNAL MISMATCH — INCORRECT'}
                   </span>
                   <span className="text-xs text-radar-muted">
                     {feedback.isCorrect
@@ -540,7 +625,7 @@ export const FlashcardSession: React.FC<FlashcardSessionProps> = ({
               className="w-full sm:flex-1 max-w-xs py-3 px-4 rounded-lg bg-radar-success hover:bg-radar-success/90 text-radar-bg flex items-center justify-center gap-2 font-bold transition-all shadow-hud-success min-h-[44px]"
             >
               <CheckCircle className="w-4 h-4" />
-              <span>{feedback?.isCorrect ? 'CONTINUE (GOT IT)' : 'GOT IT'}</span>
+              <span>{feedback?.isCorrect ? 'CONTINUE NOW ➜' : 'GOT IT'}</span>
             </button>
           </div>
         </div>
